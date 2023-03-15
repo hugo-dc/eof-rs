@@ -67,10 +67,12 @@ mod tests {
                     EOFTypeSectionEntry {
                         inputs: 0,
                         outputs: 0,
+                        max_stack_height: 0,
                     },
                     EOFTypeSectionEntry {
                         inputs: 1,
                         outputs: 1,
+                        max_stack_height: 0,
                     },
                 ]),
                 EOFSection::Code(vec![0xfe]),
@@ -86,7 +88,7 @@ mod tests {
 
     #[test]
     fn andreis_code() {
-        let bin = "ef000103000601003b01001701001d0000000101010160043560003560e01c63c766526781145d001c63c6c2ea1781145d00065050600080fd50fb000260005260206000f350fb000160005260206000f3600181115d0004506001fc60018103fb000181029050fc600281115d0004506001fc60028103fb000260018203fb0002019050fc";
+        let bin = "ef000101000c020003003b0017001d0300000000000004010100030101000460043560003560e01c63c766526781145d001c63c6c2ea1781145d00065050600080fd50b0000260005260206000f350b0000160005260206000f3600181115d0004506001b160018103b0000181029050b1600281115d0004506001b160028103b0000260018203b00002019050b1";
         let input = hex::decode(bin).unwrap();
         let deserialized = crate::de::from_slice(&input[..]).unwrap();
         let formatted = format!("{}", deserialized);

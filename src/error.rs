@@ -10,6 +10,7 @@ pub enum Error {
     UnsupportedVersion,
     UnsupportedSectionKind,
     NoSections,
+    IncompleteSections,
     InvalidSectionOrder,
     MissingCodeSection,
     MismatchingCodeAndTypeSections,
@@ -35,9 +36,10 @@ impl Display for Error {
         match self {
             Message(msg) => write!(f, "{}", msg),
             InvalidMagic => write!(f, "Invalid magic"),
-            UnsupportedVersion => write!(f, "Unsupporetd version"),
+            UnsupportedVersion => write!(f, "Unsupported version"),
             UnsupportedSectionKind => write!(f, "Unsupported section kind"),
             NoSections => write!(f, "No sections"),
+            IncompleteSections => write!(f, "Incomplete sections"),
             InvalidSectionOrder => write!(f, "Invalid section order"),
             MissingCodeSection => write!(f, "Missing Code section"),
             MismatchingCodeAndTypeSections => {

@@ -45,7 +45,7 @@ impl EOFValidator for EOFContainer {
                 let code_sections_count = self
                     .sections
                     .iter()
-                    .filter(|section| section.kind() == 1)
+                    .filter(|section| section.kind() == 2)
                     .count();
                 let types_count = types.len();
                 if code_sections_count != types_count {
@@ -73,10 +73,12 @@ mod tests {
                     EOFTypeSectionEntry {
                         inputs: 0,
                         outputs: 0,
+                        max_stack_height: 0,
                     },
                     EOFTypeSectionEntry {
                         inputs: 1,
                         outputs: 1,
+                        max_stack_height: 0,
                     },
                 ]),
                 EOFSection::Code(vec![0xfe]),
@@ -84,7 +86,7 @@ mod tests {
                 EOFSection::Data(vec![0, 1, 2, 3, 4]),
             ],
         };
-        assert!(container.is_valid_eof().is_ok());
+        assert_eq!(container.is_valid_eof().is_ok(), true);
     }
 
     #[test]
@@ -169,6 +171,7 @@ mod tests {
                 EOFSection::Type(vec![EOFTypeSectionEntry {
                     inputs: 0,
                     outputs: 0,
+                    max_stack_height: 0,
                 }]),
             ],
         };
@@ -186,10 +189,12 @@ mod tests {
                 EOFSection::Type(vec![EOFTypeSectionEntry {
                     inputs: 0,
                     outputs: 0,
+                    max_stack_height: 0,
                 }]),
                 EOFSection::Type(vec![EOFTypeSectionEntry {
                     inputs: 1,
                     outputs: 1,
+                    max_stack_height: 0,
                 }]),
                 EOFSection::Code(vec![0xfe]),
             ],
@@ -209,10 +214,12 @@ mod tests {
                     EOFTypeSectionEntry {
                         inputs: 0,
                         outputs: 0,
+                        max_stack_height: 0,
                     },
                     EOFTypeSectionEntry {
                         inputs: 1,
                         outputs: 1,
+                        max_stack_height: 0,
                     },
                 ]),
                 EOFSection::Code(vec![0xfe]),
@@ -232,6 +239,7 @@ mod tests {
                 EOFSection::Type(vec![EOFTypeSectionEntry {
                     inputs: 0,
                     outputs: 0,
+                    max_stack_height: 0,
                 }]),
                 EOFSection::Code(vec![0xfe]),
                 EOFSection::Code(vec![0xfe]),

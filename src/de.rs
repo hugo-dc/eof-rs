@@ -54,24 +54,50 @@ impl Decoder {
 
     fn read(&mut self, v: &[u8]) -> Result<()> {
         let mut reader = v;
+
         if (reader.read_u16()?) != EOF_MAGIC {
             return Err(Error::InvalidMagic);
         }
         if (reader.read_u8()?) != EOF_VERSION_1 {
             return Err(Error::UnsupportedVersion);
         }
+
         // TODO: rewrite this to be more idiomatic
         loop {
-            let section_kind = reader.read_u8()?;
-            if section_kind == EOF_SECTION_TERMINATOR {
-                break;
+            if let Ok(section_kind) = reader.read_u8() {
+                if section_kind == EOF_SECTION_TERMINATOR {
+                    break;
+                }
+                let section_size = reader.read_u16()?;
+
+                if section_kind == EOF_SECTION_CODE {
+                    let mut c = 0;
+                    loop {
+                        if let Ok(code_size) = reader.read_u16() {
+                            self.headers.push(HeaderEntry {
+                                kind: section_kind,
+                                size: code_size,
+                            });
+
+                            c+=1;
+                            if c >= section_size {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                } else {
+                    self.headers.push(HeaderEntry {
+                        kind: section_kind,
+                        size: section_size,
+                    });
+                }
+            } else {
+                return Err(Error::IncompleteSections);
             }
-            let section_size = reader.read_u16()?;
-            self.headers.push(HeaderEntry {
-                kind: section_kind,
-                size: section_size,
-            });
         }
+
         for i in 0..self.headers.len() {
             self.contents
                 .push(reader.read_bytes(self.headers[i].size as usize)?);
@@ -98,10 +124,11 @@ impl Decoder {
             } else if kind == EOF_SECTION_TYPE {
                 let mut reader = &self.contents[i][..];
                 let mut tmp: Vec<EOFTypeSectionEntry> = vec![];
-                for _ in 0..(reader.len() / 2) {
+                for _ in 0..(reader.len() / 4) {
                     tmp.push(EOFTypeSectionEntry {
                         inputs: reader.read_u8()?,
                         outputs: reader.read_u8()?,
+                        max_stack_height: reader.read_u16()?,
                     });
                 }
                 container.sections.push(EOFSection::Type(tmp));
@@ -125,7 +152,7 @@ mod tests {
 
     #[test]
     fn decode_eof_bytes() {
-        let input = hex::decode("ef00010300040100010100010200050000000101fefe0001020304").unwrap();
+        let input = hex::decode("ef000101000802000200010001030005000000000001010001fefe0001020304").unwrap();
         let container = EOFContainer {
             version: 1,
             sections: vec![
@@ -133,10 +160,12 @@ mod tests {
                     EOFTypeSectionEntry {
                         inputs: 0,
                         outputs: 0,
+                        max_stack_height: 0,
                     },
                     EOFTypeSectionEntry {
                         inputs: 1,
                         outputs: 1,
+                        max_stack_height: 1,
                     },
                 ]),
                 EOFSection::Code(vec![0xfe]),
@@ -146,8 +175,6 @@ mod tests {
         };
 
         let deserialized = from_slice(&input[..]).unwrap();
-
-        println!("{:?}", container);
         assert_eq!(deserialized, container);
     }
 }

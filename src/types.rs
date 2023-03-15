@@ -1,11 +1,12 @@
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer, Deserializer};
+use hex::{FromHex};
 
 pub const EOF_MAGIC: u16 = 0xef00;
 pub const EOF_VERSION_1: u8 = 1;
 pub const EOF_SECTION_TERMINATOR: u8 = 0;
-pub const EOF_SECTION_CODE: u8 = 1;
-pub const EOF_SECTION_DATA: u8 = 2;
-pub const EOF_SECTION_TYPE: u8 = 3;
+pub const EOF_SECTION_TYPE: u8 = 1;
+pub const EOF_SECTION_CODE: u8 = 2;
+pub const EOF_SECTION_DATA: u8 = 3;
 
 pub type EOFVersion = u8;
 
@@ -17,9 +18,9 @@ pub struct EOFContainer {
 
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum EOFSection {
-    #[serde(serialize_with = "serialize_bytes")]
+    #[serde(serialize_with = "serialize_bytes", deserialize_with = "deserialize_hexstr")]
     Code(Vec<u8>),
-    #[serde(serialize_with = "serialize_bytes")]
+    #[serde(serialize_with = "serialize_bytes", deserialize_with = "deserialize_hexstr")]
     Data(Vec<u8>),
     Type(Vec<EOFTypeSectionEntry>),
 }
@@ -28,6 +29,7 @@ pub enum EOFSection {
 pub struct EOFTypeSectionEntry {
     pub inputs: u8,
     pub outputs: u8,
+    pub max_stack_height: u16,
 }
 
 impl EOFSection {
@@ -56,6 +58,15 @@ where
     s.serialize_str(&hex::encode(x.as_ref()))
 }
 
+fn deserialize_hexstr<'de, D>(d: D) -> Result<Vec<u8>, D::Error>
+where 
+    D: Deserializer<'de>
+{
+    use serde::de::Error;
+    String::deserialize(d)
+    .and_then(|string| Vec::from_hex(&string).map_err(|err| Error::custom(err.to_string())))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::*;
@@ -69,10 +80,12 @@ mod tests {
                     EOFTypeSectionEntry {
                         inputs: 0,
                         outputs: 0,
+                        max_stack_height: 0,
                     },
                     EOFTypeSectionEntry {
                         inputs: 1,
                         outputs: 1,
+                        max_stack_height: 0,
                     },
                 ]),
                 EOFSection::Code(vec![0xfe]),
@@ -81,10 +94,9 @@ mod tests {
             ],
         };
         let serialized = serde_json::to_string(&container).unwrap();
-        println!("{}", serialized);
         assert_eq!(
             serialized,
-            "{\"version\":1,\"sections\":[{\"Type\":[{\"inputs\":0,\"outputs\":0},{\"inputs\":1,\"outputs\":1}]},{\"Code\":\"fe\"},{\"Code\":\"fe\"},{\"Data\":\"0001020304\"}]}"
+            "{\"version\":1,\"sections\":[{\"Type\":[{\"inputs\":0,\"outputs\":0,\"max_stack_height\":0},{\"inputs\":1,\"outputs\":1,\"max_stack_height\":0}]},{\"Code\":\"fe\"},{\"Code\":\"fe\"},{\"Data\":\"0001020304\"}]}"
         );
     }
 }
