@@ -32,6 +32,7 @@ impl ExactReader for &[u8] {
     }
 }
 
+#[derive(Debug)]
 struct HeaderEntry {
     kind: u8,
     size: u16,
@@ -55,43 +56,88 @@ impl Decoder {
     fn read(&mut self, v: &[u8]) -> Result<()> {
         let mut reader = v;
 
+        if v.len() <= 1 {
+            return Err(Error::InvalidMagic);
+        }
+
         if (reader.read_u16()?) != EOF_MAGIC {
             return Err(Error::InvalidMagic);
         }
-        if (reader.read_u8()?) != EOF_VERSION_1 {
-            return Err(Error::UnsupportedVersion);
+
+        match reader.read_u8() {
+            Ok(version) => {
+                if version != EOF_VERSION_1 {
+                    return Err(Error::UnsupportedVersion);
+                }
+            }
+            Err(_) => {
+                return Err(Error::UnexpectedEOF);
+            }
         }
 
+        let mut type_section_found = false;
+        let mut code_section_found = false;
+        let mut data_section_found = false;
         // TODO: rewrite this to be more idiomatic
         loop {
             if let Ok(section_kind) = reader.read_u8() {
                 if section_kind == EOF_SECTION_TERMINATOR {
                     break;
                 }
+
+                if reader.len() == 0 {
+                    return Err(Error::IncompleteSections);
+                }
+
+                if reader.len() < 2 {
+                    return Err(Error::IncompleteSectionSize);
+                }
+
                 let section_size = reader.read_u16()?;
 
-                if section_kind == EOF_SECTION_CODE {
-                    let mut c = 0;
-                    loop {
-                        if let Ok(code_size) = reader.read_u16() {
-                            self.headers.push(HeaderEntry {
-                                kind: section_kind,
-                                size: code_size,
-                            });
+                match section_kind {
+                    EOF_SECTION_TYPE => {
+                        if section_size % 4 != 0 {
+                            return Err(Error::InvalidTypeSectionSize);
+                        }
+                        self.headers.push(HeaderEntry {
+                            kind: section_kind,
+                            size: section_size,
+                        });
+                        type_section_found = true;
+                    }
+                    EOF_SECTION_CODE => {
+                        let mut c = 0;
+                        loop {
+                            if let Ok(code_size) = reader.read_u16() {
+                                self.headers.push(HeaderEntry {
+                                    kind: section_kind,
+                                    size: code_size,
+                                });
 
-                            c+=1;
-                            if c >= section_size {
+                                c+=1;
+                                if c >= section_size {
+                                    break;
+                                }
+                            } else {
                                 break;
                             }
-                        } else {
-                            break;
                         }
+                        code_section_found = true;
+                    },
+                    EOF_SECTION_DATA => {
+                        self.headers.push(HeaderEntry {
+                            kind: section_kind,
+                            size: section_size,
+                        });
+                        data_section_found = true;
                     }
-                } else {
-                    self.headers.push(HeaderEntry {
-                        kind: section_kind,
-                        size: section_size,
-                    });
+                    _ => {
+                        self.headers.push(HeaderEntry {
+                            kind: section_kind,
+                            size: section_size,
+                        });
+                    }
                 }
             } else {
                 return Err(Error::IncompleteSections);
@@ -102,6 +148,23 @@ impl Decoder {
             self.contents
                 .push(reader.read_bytes(self.headers[i].size as usize)?);
         }
+
+        if !type_section_found {
+            return Err(Error::MissingTypeHeader);
+        }
+
+        if !code_section_found {
+            return Err(Error::MissingCodeHeader);
+        }
+
+        if !data_section_found {
+            return Err(Error::MissingDataHeader);
+        }
+
+        if reader.len() != 0 {
+            return Err(Error::InvalidContainerSize);
+        }
+
         Ok(())
     }
 
@@ -110,6 +173,7 @@ impl Decoder {
             version: self.version,
             sections: vec![],
         };
+
         // TODO: make this idiomatic
         for i in 0..self.headers.len() {
             let kind = self.headers[i].kind;
@@ -123,6 +187,11 @@ impl Decoder {
                     .push(EOFSection::Data(self.contents[i].to_vec()));
             } else if kind == EOF_SECTION_TYPE {
                 let mut reader = &self.contents[i][..];
+
+                if reader.len() % 4 != 0 {
+                    return Err(Error::InvalidTypeSectionSize);
+                }
+
                 let mut tmp: Vec<EOFTypeSectionEntry> = vec![];
                 for _ in 0..(reader.len() / 4) {
                     tmp.push(EOFTypeSectionEntry {
@@ -136,6 +205,7 @@ impl Decoder {
                 return Err(Error::UnsupportedSectionKind);
             }
         }
+
         Ok(container)
     }
 }
@@ -150,6 +220,8 @@ pub fn from_slice(value: &[u8]) -> Result<EOFContainer> {
 mod tests {
     use super::*;
 
+    // TODO: The following tests should only validate if EOF format is valid, for example,
+    // there may exist a container with invalid version, version should be validated in validate.rs 
     #[test]
     fn decode_eof_bytes() {
         let input = hex::decode("ef000101000802000200010001030005000000000001010001fefe0001020304").unwrap();
@@ -177,4 +249,83 @@ mod tests {
         let deserialized = from_slice(&input[..]).unwrap();
         assert_eq!(deserialized, container);
     }
+
+    #[test]
+    fn unexpected_eof() {
+        let input = hex::decode("ef00").unwrap();
+        let deserialized = from_slice(&input[..]);
+        assert_eq!(deserialized, Err(Error::UnexpectedEOF));
+    }
+
+    #[test]
+    fn invalid_magic() {
+        let input = hex::decode("ef0101010004020001002903000000000000027fef000101000402000100010300000000000000fe00000000000000000000000060005260146000f3").unwrap();
+        let deserialized = from_slice(&input[..]);
+        assert_eq!(deserialized, Err(Error::InvalidMagic));
+    }
+
+    #[test]
+    fn invalid_version() {
+        let input = hex::decode("ef0002010004020001002903000000000000027fef000101000402000100010300000000000000fe00000000000000000000000060005260146000f3").unwrap();
+        let deserialized = from_slice(&input[..]);
+        assert_eq!(deserialized, Err(Error::UnsupportedVersion));
+    }
+
+    #[test]
+    fn invalid_type_section_size() {
+        let input = hex::decode("ef000101000202000100010300000000000000fe").unwrap();
+        let deserialized = from_slice(&input[..]);
+        assert_eq!(deserialized, Err(Error::InvalidTypeSectionSize));
+    }
+
+    #[test]
+    fn invalid_container_size() {
+        let input = hex::decode("ef000101000402000100010300000000000000feaabbcc").unwrap();
+        let deserialized = from_slice(&input[..]);
+        assert_eq!(deserialized, Err(Error::InvalidContainerSize));
+    }
+
+    #[test]
+    fn missing_type_header() {
+        let input = hex::decode("ef0001020001000103000200feaabb").unwrap();
+        let deserialized = from_slice(&input[..]);
+        assert_eq!(deserialized, Err(Error::MissingTypeHeader));
+    }
+
+    #[test]
+    fn missing_code_header() {
+        let input = hex::decode("ef00010100040300020000000000feaabb").unwrap();
+        let deserialized = from_slice(&input[..]);
+
+        assert_eq!(
+            deserialized,
+            Err(Error::MissingCodeHeader)
+        );
+    }
+
+    #[test]
+    fn missing_data_header() {
+        let input = hex::decode("ef000101000402000100010000000000fefe").unwrap();
+        let deserialized = from_slice(&input[..]);
+        assert_eq!(deserialized, Err(Error::MissingDataHeader));
+    }
+
+
+    // NOTE: This cannot happen because if the code ends without terminator, the
+    // container format is not valid
+    /*
+    #[test]
+    fn missing_terminator() {
+        let input = hex::decode("ef0001010004020001000103000001010000fe").unwrap();
+        let deserialized = from_slice(&input[..]);
+        assert_eq!(deserialized, Err(Error::MissingTerminator));
+    }
+    */
+
 }
+
+
+
+
+
+

@@ -22,23 +22,24 @@ fn validate(input: Option<&String>) -> Result<()> {
 }
 
 fn convert(input: Option<&String>, fmt: &str) -> Result<()> {
+
+    let code: Vec<u8>;
     if input.is_some() {
-        let a = Vec::from_hex(input.unwrap()).unwrap();
-        let container = eof_rs::from_slice(&a).unwrap(); // FIXME: translate error
-        
-        container.is_valid_eof()?;
-
-        if fmt == "json" {
-            let json = serde_json::to_string(&container).unwrap();
-            println!("{}", json)
-        } else {
-            unimplemented!();
-        }
-        return Ok(());
-
+        code = Vec::from_hex(input.unwrap()).unwrap();
     } else {
-        panic!("invalid input");
+        code = Vec::from_hex(io::read_to_string(io::stdin()).unwrap().trim()).unwrap();
     }
+
+    let container = eof_rs::from_slice(&code)?; // FIXME: translate error
+    container.is_valid_eof()?;
+
+    if fmt == "json" {
+        let json = serde_json::to_string(&container).unwrap();
+        println!("{}", json)
+    } else {
+        unimplemented!();
+    }
+    return Ok(());
 }
 
 fn main() -> Result<()> {

@@ -3,6 +3,7 @@ mod display;
 mod error;
 mod ser;
 mod types;
+mod opcodes;
 mod validation;
 
 pub use error::{Result, Error};
