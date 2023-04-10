@@ -145,6 +145,9 @@ impl Decoder {
         }
 
         for i in 0..self.headers.len() {
+            if reader.len() < self.headers[i].size as usize || (self.headers[i].size == 0 && self.headers[i].kind != EOF_SECTION_DATA ) {
+                return Err(Error::InvalidCodeSize);
+            }
             self.contents
                 .push(reader.read_bytes(self.headers[i].size as usize)?);
         }

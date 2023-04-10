@@ -4,8 +4,6 @@ use std::collections::HashMap;
 use super::error::{Error, Result};
 use super::types::*;
 use super::opcodes::*;
-use super::de::*; // For testing only
-
 
 pub fn validate_code(function_id: usize, code: &Vec<u8>, types: &[EOFTypeSectionEntry]) -> Result<()> {
     let mut worklist: HashMap<u16, (u16, bool)> = HashMap::new();
@@ -247,7 +245,7 @@ impl EOFValidator for EOFContainer {
                     if types[i].outputs > 127 {
                         return Err(Error::TooManyOutputs);
                     }
-                    if types[i].max_stack_height > 1024 {
+                    if types[i].max_stack_height >= 1024 {
                         return Err(Error::TooLargeMaxStackHeight);
                     }
                     if i == 0 && (types[i].inputs != 0 || types[i].outputs != 0) {
@@ -272,7 +270,6 @@ impl EOFValidator for EOFContainer {
                 panic!(); // In case the above logic is wrong.
             }
         }
-
         Ok(())
     }
 }
@@ -280,6 +277,7 @@ impl EOFValidator for EOFContainer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::de::*;
 
     #[test]
     fn complex_container() {
@@ -611,14 +609,15 @@ mod tests {
 
     #[test]
     fn too_many_inputs() {
-        // TODO: Test from 128 to 255
-        let code = hex::decode("ef0001010004020001000103000000ff000000fe").unwrap();
-        let container = from_slice(&code).unwrap();
+        for i in 128..256 {
+            let code = hex::decode(format!("ef0001010004020001000103000000{:02x}000000fe", i)).unwrap();
+            let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::TooManyInputs)
-        );
+            assert_eq!(
+                container.is_valid_eof().err(),
+                Some(Error::TooManyInputs)
+            );
+        }
     }
 
     #[test]
@@ -634,14 +633,15 @@ mod tests {
 
     #[test]
     fn too_large_max_stack_height() {
-        // TODO: Test from 1024 to 0xffff 
-        let code = hex::decode("ef00010100040200010001030000000000fffffe").unwrap();
-        let container = from_slice(&code).unwrap();
+        for i in 1024..65536 {
+            let code = hex::decode(format!("ef00010100040200010001030000000000{:04x}fe", i)).unwrap();
+            let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::TooLargeMaxStackHeight)
-        );
+            assert_eq!(
+                container.is_valid_eof().err(),
+                Some(Error::TooLargeMaxStackHeight)
+            );
+        }
     }
 
     #[test]
@@ -665,22 +665,19 @@ mod tests {
 
     #[test]
     fn invalid_code_size() {
-        // TODO: Is this valid format?
-        /*
         let code = hex::decode("ef00010100040200000300000000000000").unwrap();
-        let container = from_slice(&code).unwrap();
+        let container = from_slice(&code);
 
         assert_eq!(
-            container.is_valid_eof().err(),
+            container.err(),
             Some(Error::InvalidCodeSize)
         );
-        */
 
         let code = hex::decode("ef000101000402000100000300000000000000").unwrap();
-        let container = from_slice(&code[..]).unwrap();
+        let container = from_slice(&code[..]);
 
         assert_eq!(
-            container.is_valid_eof().err(),
+            container.err(),
             Some(Error::InvalidCodeSize)
         );
 
@@ -761,9 +758,36 @@ mod tests {
             Some(Error::InvalidJumpdest)
         );
 
-        // TODO: Test RJUMPV and PUSH* Immediates
         // Target immediate
+        // RJUMP to self immediate:
         let code = hex::decode("ef0001010004020001000303000000000000005cffff").unwrap();
+        let container = from_slice(&code).unwrap();
+
+        assert_eq!(
+            container.is_valid_eof().err(),
+            Some(Error::InvalidJumpdest)
+        );
+
+        // RJUMP to PUSH immediate
+        let code = hex::decode("ef00010100040200010007030000000000000161ffff5cfffc00").unwrap();
+        let container = from_slice(&code).unwrap();
+
+        assert_eq!(
+            container.is_valid_eof().err(),
+            Some(Error::InvalidJumpdest)
+        );
+
+        // RJUMP to RJUMPI Immediate
+        let code = hex::decode("ef0001010004020001000a03000000000000005c00050060015d000000").unwrap();
+        let container = from_slice(&code).unwrap();
+
+        assert_eq!(
+            container.is_valid_eof().err(),
+            Some(Error::InvalidJumpdest)
+        );
+
+        // RJUMP to RJUMPV immediate
+        let code = hex::decode("ef0001010004020001001f03000000000000005c000560015e0300000006000c600160015500600260025500600360035500").unwrap();
         let container = from_slice(&code).unwrap();
 
         assert_eq!(
