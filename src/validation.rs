@@ -5,7 +5,11 @@ use super::error::{Error, Result};
 use super::types::*;
 use super::opcodes::*;
 
-pub fn validate_code(function_id: usize, code: &Vec<u8>, types: &[EOFTypeSectionEntry]) -> Result<()> {
+pub fn validate_code(
+    function_id: usize,
+    code: &Vec<u8>,
+    types: &[EOFTypeSectionEntry],
+) -> Result<()> {
     let mut worklist: HashMap<u16, (u16, bool)> = HashMap::new();
     let mut stack_heights: HashMap<u16, u16> = HashMap::new();
     let mut immediates: HashSet<u16> = HashSet::new();
@@ -28,17 +32,18 @@ pub fn validate_code(function_id: usize, code: &Vec<u8>, types: &[EOFTypeSection
             }
 
             stack_heights.insert(i as u16, current_stack_height);
-            current_stack_height = current_stack_height - (op.stack_inputs as u16) + (op.stack_outputs as u16);
+            current_stack_height = current_stack_height - (op.stack_inputs as u16) +
+                (op.stack_outputs as u16);
 
             if current_stack_height > max_stack_height {
                 max_stack_height = current_stack_height;
             }
 
-            if op.immediates as usize > code[i+1..].len() {
+            if op.immediates as usize > code[i + 1..].len() {
                 return Err(Error::TruncatedImmediate);
             }
             if op.name == "CALLF" {
-                let section: [u8; 2] = code[i+1..i+3].try_into().unwrap();
+                let section: [u8; 2] = code[i + 1..i + 3].try_into().unwrap();
                 let section = u16::from_be_bytes(section);
 
                 if section as usize >= types.len() {
@@ -50,7 +55,7 @@ pub fn validate_code(function_id: usize, code: &Vec<u8>, types: &[EOFTypeSection
                 }
             }
             if op.name == "RJUMP" || op.name == "RJUMPI" {
-                let offset: [u8; 2] = code[i+1..i+3].try_into().unwrap();
+                let offset: [u8; 2] = code[i + 1..i + 3].try_into().unwrap();
                 let offset = i16::from_be_bytes(offset);
                 let dest = (i + 1 + op.immediates as usize) as i32 + offset as i32;
 
@@ -65,12 +70,13 @@ pub fn validate_code(function_id: usize, code: &Vec<u8>, types: &[EOFTypeSection
             }
 
             if op.name == "RJUMPV" {
-                let count = code[i+1];
+                let count = code[i + 1];
                 if count == 0 {
                     return Err(Error::InvalidBranchCount);
                 }
                 // Add immediates
-                let imm_pc: Vec<u16> = ((i+2) as u16..((i+2+(count *2) as usize) as u16)).collect();
+                let imm_pc: Vec<u16> = ((i + 2) as u16..((i + 2 + (count * 2) as usize) as u16))
+                    .collect();
                 let imm: HashSet<u16> = HashSet::from_iter(imm_pc.iter().cloned());
                 immediates = immediates.union(&imm).cloned().collect();
 
@@ -79,7 +85,8 @@ pub fn validate_code(function_id: usize, code: &Vec<u8>, types: &[EOFTypeSection
                 rjumpdests.insert(inst_end as u16);
                 worklist.insert(inst_end as u16, (current_stack_height, visiting));
                 for j in 0..(count as usize) {
-                    let offset: [u8; 2] = code[i+2+(j*2)..i+4+(j*2)].try_into().unwrap();
+                    let offset: [u8; 2] =
+                        code[i + 2 + (j * 2)..i + 4 + (j * 2)].try_into().unwrap();
                     let offset = i16::from_be_bytes(offset);
                     let dest = inst_end as i32 + offset as i32;
                     if dest as usize >= code.len() {
@@ -97,7 +104,8 @@ pub fn validate_code(function_id: usize, code: &Vec<u8>, types: &[EOFTypeSection
                 }
             }
 
-            let imm_pc: Vec<u16> = ((i+1) as u16..((i+1+op.immediates as usize) as u16)).collect();
+            let imm_pc: Vec<u16> = ((i + 1) as u16..((i + 1 + op.immediates as usize) as u16))
+                .collect();
             let imm: HashSet<u16> = HashSet::from_iter(imm_pc.iter().cloned());
             immediates = immediates.union(&imm).cloned().collect();
             i += 1 + op.immediates as usize;
@@ -125,7 +133,7 @@ pub fn validate_code(function_id: usize, code: &Vec<u8>, types: &[EOFTypeSection
             }
         }
     }
- 
+
 
     if max_stack_height != types[function_id].max_stack_height as u16 {
         return Err(Error::InvalidMaxStackHeight);
@@ -157,7 +165,7 @@ pub fn validate_code(function_id: usize, code: &Vec<u8>, types: &[EOFTypeSection
         }
 
         if op.name == "RJUMPV" {
-            let count = code[i+1];
+            let count = code[i + 1];
             i += 1 + op.immediates as usize + (count as usize * 2);
         } else {
             i += 1 + op.immediates as usize;
@@ -315,7 +323,7 @@ mod tests {
                         inputs: 0,
                         outputs: 0,
                         max_stack_height: 0,
-                    }
+                    },
                 ]),
                 EOFSection::Code(vec![0xfe]),
                 EOFSection::Data(vec![0, 1, 2, 3, 4]),
@@ -354,12 +362,15 @@ mod tests {
         let container = EOFContainer {
             version: 1,
             sections: vec![
-                EOFSection::Type(vec![EOFTypeSectionEntry {
-                    inputs: 0,
-                    outputs: 0,
-                    max_stack_height: 0,
-                }]),
-                EOFSection::Data(vec![0xfe])],
+                EOFSection::Type(vec![
+                    EOFTypeSectionEntry {
+                        inputs: 0,
+                        outputs: 0,
+                        max_stack_height: 0,
+                    },
+                ]),
+                EOFSection::Data(vec![0xfe]),
+            ],
         };
         assert_eq!(
             container.is_valid_eof().err(),
@@ -373,11 +384,13 @@ mod tests {
             version: 1,
             sections: vec![
                 EOFSection::Code(vec![0xfe]),
-                EOFSection::Type(vec![EOFTypeSectionEntry {
-                    inputs: 0,
-                    outputs: 0,
-                    max_stack_height: 0,
-                }]),
+                EOFSection::Type(vec![
+                    EOFTypeSectionEntry {
+                        inputs: 0,
+                        outputs: 0,
+                        max_stack_height: 0,
+                    },
+                ]),
                 EOFSection::Data(vec![]),
             ],
         };
@@ -393,11 +406,13 @@ mod tests {
             version: 1,
             sections: vec![
                 EOFSection::Data(vec![0, 1, 2, 3, 4]),
-                EOFSection::Type(vec![EOFTypeSectionEntry {
-                    inputs: 0,
-                    outputs: 0,
-                    max_stack_height: 0,
-                }]),
+                EOFSection::Type(vec![
+                    EOFTypeSectionEntry {
+                        inputs: 0,
+                        outputs: 0,
+                        max_stack_height: 0,
+                    },
+                ]),
                 EOFSection::Code(vec![0xfe]),
             ],
         };
@@ -412,11 +427,13 @@ mod tests {
         let container = EOFContainer {
             version: 1,
             sections: vec![
-                EOFSection::Type(vec![EOFTypeSectionEntry {
-                    inputs: 0,
-                    outputs: 0,
-                    max_stack_height: 0,
-                }]),
+                EOFSection::Type(vec![
+                    EOFTypeSectionEntry {
+                        inputs: 0,
+                        outputs: 0,
+                        max_stack_height: 0,
+                    },
+                ]),
                 EOFSection::Data(vec![0, 1, 2, 3, 4]),
                 EOFSection::Code(vec![0xfe]),
             ],
@@ -433,11 +450,13 @@ mod tests {
             version: 1,
             sections: vec![
                 EOFSection::Code(vec![0xfe]),
-                EOFSection::Type(vec![EOFTypeSectionEntry {
-                    inputs: 0,
-                    outputs: 0,
-                    max_stack_height: 0,
-                }]),
+                EOFSection::Type(vec![
+                    EOFTypeSectionEntry {
+                        inputs: 0,
+                        outputs: 0,
+                        max_stack_height: 0,
+                    },
+                ]),
                 EOFSection::Data(vec![]),
             ],
         };
@@ -452,16 +471,20 @@ mod tests {
         let container = EOFContainer {
             version: 1,
             sections: vec![
-                EOFSection::Type(vec![EOFTypeSectionEntry {
-                    inputs: 0,
-                    outputs: 0,
-                    max_stack_height: 0,
-                }]),
-                EOFSection::Type(vec![EOFTypeSectionEntry {
-                    inputs: 1,
-                    outputs: 1,
-                    max_stack_height: 0,
-                }]),
+                EOFSection::Type(vec![
+                    EOFTypeSectionEntry {
+                        inputs: 0,
+                        outputs: 0,
+                        max_stack_height: 0,
+                    },
+                ]),
+                EOFSection::Type(vec![
+                    EOFTypeSectionEntry {
+                        inputs: 1,
+                        outputs: 1,
+                        max_stack_height: 0,
+                    },
+                ]),
                 EOFSection::Code(vec![0xfe]),
             ],
         };
@@ -503,11 +526,13 @@ mod tests {
         let container = EOFContainer {
             version: 1,
             sections: vec![
-                EOFSection::Type(vec![EOFTypeSectionEntry {
-                    inputs: 0,
-                    outputs: 0,
-                    max_stack_height: 0,
-                }]),
+                EOFSection::Type(vec![
+                    EOFTypeSectionEntry {
+                        inputs: 0,
+                        outputs: 0,
+                        max_stack_height: 0,
+                    },
+                ]),
                 EOFSection::Code(vec![0xfe]),
                 EOFSection::Code(vec![0xfe]),
                 EOFSection::Data(vec![]),
@@ -520,7 +545,7 @@ mod tests {
 
         for col in (0..3).rev() {
             for row in 0..5 {
-            println!("{} {}", col, row);
+                println!("{} {}", col, row);
             }
         }
 
@@ -530,9 +555,7 @@ mod tests {
     fn missing_type_header() {
         let container = EOFContainer {
             version: 1,
-            sections: vec![
-                EOFSection::Code(vec![0xfe]),
-            ],
+            sections: vec![EOFSection::Code(vec![0xfe])],
         };
 
         assert_eq!(
@@ -561,11 +584,13 @@ mod tests {
         let container = EOFContainer {
             version: 1,
             sections: vec![
-                EOFSection::Type(vec![EOFTypeSectionEntry {
-                    inputs: 0,
-                    outputs: 0,
-                    max_stack_height: 0,
-                }]),
+                EOFSection::Type(vec![
+                    EOFTypeSectionEntry {
+                        inputs: 0,
+                        outputs: 0,
+                        max_stack_height: 0,
+                    },
+                ]),
                 EOFSection::Data(vec![0xaa, 0xbb]),
             ],
         };
@@ -592,11 +617,13 @@ mod tests {
         let container = EOFContainer {
             version: 1,
             sections: vec![
-                EOFSection::Type(vec![EOFTypeSectionEntry {
-                    inputs: 0,
-                    outputs: 0,
-                    max_stack_height: 0,
-                }]),
+                EOFSection::Type(vec![
+                    EOFTypeSectionEntry {
+                        inputs: 0,
+                        outputs: 0,
+                        max_stack_height: 0,
+                    },
+                ]),
                 EOFSection::Code(vec![0xfe, 0xfe]),
             ],
         };
@@ -610,13 +637,11 @@ mod tests {
     #[test]
     fn too_many_inputs() {
         for i in 128..256 {
-            let code = hex::decode(format!("ef0001010004020001000103000000{:02x}000000fe", i)).unwrap();
+            let code = hex::decode(format!("ef0001010004020001000103000000{:02x}000000fe", i))
+                .unwrap();
             let container = from_slice(&code).unwrap();
 
-            assert_eq!(
-                container.is_valid_eof().err(),
-                Some(Error::TooManyInputs)
-            );
+            assert_eq!(container.is_valid_eof().err(), Some(Error::TooManyInputs));
         }
     }
 
@@ -625,16 +650,14 @@ mod tests {
         let code = hex::decode("ef000101000402000100010300000000ff0000fe").unwrap();
         let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::TooManyOutputs)
-        );
+        assert_eq!(container.is_valid_eof().err(), Some(Error::TooManyOutputs));
     }
 
     #[test]
     fn too_large_max_stack_height() {
         for i in 1024..65536 {
-            let code = hex::decode(format!("ef00010100040200010001030000000000{:04x}fe", i)).unwrap();
+            let code = hex::decode(format!("ef00010100040200010001030000000000{:04x}fe", i))
+                .unwrap();
             let container = from_slice(&code).unwrap();
 
             assert_eq!(
@@ -668,18 +691,12 @@ mod tests {
         let code = hex::decode("ef00010100040200000300000000000000").unwrap();
         let container = from_slice(&code);
 
-        assert_eq!(
-            container.err(),
-            Some(Error::InvalidCodeSize)
-        );
+        assert_eq!(container.err(), Some(Error::InvalidCodeSize));
 
         let code = hex::decode("ef000101000402000100000300000000000000").unwrap();
         let container = from_slice(&code[..]);
 
-        assert_eq!(
-            container.err(),
-            Some(Error::InvalidCodeSize)
-        );
+        assert_eq!(container.err(), Some(Error::InvalidCodeSize));
 
     }
 
@@ -688,13 +705,17 @@ mod tests {
     fn undefined_instruction() {
         let code = hex::decode("ef00010100040200010001030000000000000056").unwrap();
         let container = from_slice(&code).unwrap();
-        assert_eq!(container.is_valid_eof().err(), 
-            Some(Error::UndefinedInstruction(0x56)));
+        assert_eq!(
+            container.is_valid_eof().err(),
+            Some(Error::UndefinedInstruction(0x56))
+        );
 
         let code = hex::decode("ef000101000402000100010300000000000000b3").unwrap();
         let container = from_slice(&code).unwrap();
-        assert_eq!(container.is_valid_eof().err(), 
-            Some(Error::UndefinedInstruction(0xb3)));
+        assert_eq!(
+            container.is_valid_eof().err(),
+            Some(Error::UndefinedInstruction(0xb3))
+        );
 
     }
 
@@ -726,79 +747,57 @@ mod tests {
         let code = hex::decode("ef0001010004020001000303000000000000005cfffb").unwrap();
         let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::InvalidJumpdest)
-        );
+        assert_eq!(container.is_valid_eof().err(), Some(Error::InvalidJumpdest));
 
         // Target before container code
         let code = hex::decode("ef0001010004020001000303000000000000005cffe9").unwrap();
         let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::InvalidJumpdest)
-        );
+        assert_eq!(container.is_valid_eof().err(), Some(Error::InvalidJumpdest));
 
         // Target into data section
         let code = hex::decode("ef0001010004020001000303000400000000005c0002aabbccdd").unwrap();
         let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::InvalidJumpdest)
-        );
+        assert_eq!(container.is_valid_eof().err(), Some(Error::InvalidJumpdest));
 
         // Target after code end
         let code = hex::decode("ef0001010004020001000303000000000000005c0002").unwrap();
         let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::InvalidJumpdest)
-        );
+        assert_eq!(container.is_valid_eof().err(), Some(Error::InvalidJumpdest));
 
         // Target immediate
         // RJUMP to self immediate:
         let code = hex::decode("ef0001010004020001000303000000000000005cffff").unwrap();
         let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::InvalidJumpdest)
-        );
+        assert_eq!(container.is_valid_eof().err(), Some(Error::InvalidJumpdest));
 
         // RJUMP to PUSH immediate
         let code = hex::decode("ef00010100040200010007030000000000000161ffff5cfffc00").unwrap();
         let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::InvalidJumpdest)
-        );
+        assert_eq!(container.is_valid_eof().err(), Some(Error::InvalidJumpdest));
 
         // RJUMP to RJUMPI Immediate
-        let code = hex::decode("ef0001010004020001000a03000000000000005c00050060015d000000").unwrap();
+        let code = hex::decode("ef0001010004020001000a03000000000000005c00050060015d000000")
+            .unwrap();
         let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::InvalidJumpdest)
-        );
+        assert_eq!(container.is_valid_eof().err(), Some(Error::InvalidJumpdest));
 
         // RJUMP to RJUMPV immediate
         let code = hex::decode("ef0001010004020001001f03000000000000005c000560015e0300000006000c600160015500600260025500600360035500").unwrap();
         let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::InvalidJumpdest)
-        );
+        assert_eq!(container.is_valid_eof().err(), Some(Error::InvalidJumpdest));
     }
 
     #[test]
     fn conflicting_stack() {
-        let code = hex::decode("ef0001010004020001000a030000000000000260005d00026001600200").unwrap();
+        let code = hex::decode("ef0001010004020001000a030000000000000260005d00026001600200")
+            .unwrap();
         let container = from_slice(&code).unwrap();
 
         assert_eq!(
@@ -809,7 +808,9 @@ mod tests {
 
     #[test]
     fn invalid_branch_count() {
-        let code = hex::decode("ef0001010008020002000a000603000000000000010000000260015d00030060015e006001600155b1").unwrap();
+        let code = hex::decode(
+            "ef0001010008020002000a000603000000000000010000000260015d00030060015e006001600155b1",
+        ).unwrap();
         let container = from_slice(&code).unwrap();
 
         assert_eq!(
@@ -823,10 +824,7 @@ mod tests {
         let code = hex::decode("ef00010100040200010004030000000000000160010100").unwrap();
         let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::StackUnderflow)
-        );
+        assert_eq!(container.is_valid_eof().err(), Some(Error::StackUnderflow));
     }
 
     #[test]
@@ -834,21 +832,17 @@ mod tests {
         let code = hex::decode("ef0001010008020002000b0bff0300000000000002010003ff60016001b000016001550050600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001600160016001505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050b1").unwrap();
         let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::StackOverflow)
-        );
+        assert_eq!(container.is_valid_eof().err(), Some(Error::StackOverflow));
     }
 
     #[test]
     fn invalid_outputs() {
-        let code = hex::decode("ef000101000802000200040003030000000000000000000001b00001006001b1").unwrap();
+        let code = hex::decode(
+            "ef000101000802000200040003030000000000000000000001b00001006001b1",
+        ).unwrap();
         let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::InvalidOutputs)
-        );
+        assert_eq!(container.is_valid_eof().err(), Some(Error::InvalidOutputs));
     }
 
     #[test]
@@ -866,7 +860,7 @@ mod tests {
     fn invalid_code_termination() {
         let code = hex::decode("ef0001010004020001000203000000000000016001").unwrap();
         let container = from_slice(&code).unwrap();
-        
+
         assert_eq!(
             container.is_valid_eof().err(),
             Some(Error::InvalidCodeTermination)
@@ -878,9 +872,6 @@ mod tests {
         let code = hex::decode("ef00010100040200010006030000000000000260006000f300").unwrap();
         let container = from_slice(&code).unwrap();
 
-        assert_eq!(
-            container.is_valid_eof().err(),
-            Some(Error::UnreachableCode)
-        );
+        assert_eq!(container.is_valid_eof().err(), Some(Error::UnreachableCode));
     }
 }

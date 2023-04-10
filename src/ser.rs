@@ -1,4 +1,4 @@
-use super::error::{Result};
+use super::error::Result;
 use super::types::*;
 
 // TODO: implement complete serde serialiser (see ciborium for an example)
@@ -20,7 +20,14 @@ impl Encoder {
     fn encode_types(types: Vec<EOFTypeSectionEntry>) -> Vec<u8> {
         types
             .into_iter()
-            .flat_map(|type_entry| vec![type_entry.inputs, type_entry.outputs, (type_entry.max_stack_height >> 8) as u8, (type_entry.max_stack_height & 0xff) as u8])
+            .flat_map(|type_entry| {
+                vec![
+                    type_entry.inputs,
+                    type_entry.outputs,
+                    (type_entry.max_stack_height >> 8) as u8,
+                    (type_entry.max_stack_height & 0xff) as u8,
+                ]
+            })
             .collect()
     }
 
@@ -47,8 +54,7 @@ impl Encoder {
     }
 
     fn finalize(self) -> Result<Vec<u8>> {
-        let mut type_headers: Vec<u8> = self
-            .headers
+        let mut type_headers: Vec<u8> = self.headers
             .iter()
             .filter(|header| header.kind == EOF_SECTION_TYPE)
             .flat_map(|header| {
@@ -60,24 +66,21 @@ impl Encoder {
             })
             .collect();
 
-        let mut code_sizes: Vec<u8> = self
-            .headers
+        let mut code_sizes: Vec<u8> = self.headers
             .iter()
             .filter(|header| header.kind == EOF_SECTION_CODE)
             .flat_map(|header| {
-                vec![
-                    (header.size >> 8) as u8,
-                    (header.size & 0xff) as u8,
-                ]
+                vec![(header.size >> 8) as u8, (header.size & 0xff) as u8]
             })
             .collect();
 
-        let mut code_header: Vec<u8> = vec![EOF_SECTION_CODE, 
+        let mut code_header: Vec<u8> = vec![
+            EOF_SECTION_CODE,
             ((code_sizes.len() / 2) >> 8) as u8,
-            ((code_sizes.len() / 2) & 0xff) as u8]; 
+            ((code_sizes.len() / 2) & 0xff) as u8,
+        ];
 
-        let mut data_header: Vec<u8> = self
-            .headers
+        let mut data_header: Vec<u8> = self.headers
             .iter()
             .filter(|header| header.kind == EOF_SECTION_DATA)
             .flat_map(|header| {
@@ -118,7 +121,7 @@ pub fn to_bytes(value: EOFContainer) -> Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
+    use super::*;
 
     #[test]
     fn encode_eof_bytes() {

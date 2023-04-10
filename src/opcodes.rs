@@ -187,9 +187,3 @@ impl OpCode {
             .ok_or_else(|| Error::UndefinedInstruction(code))
     }
 }
-
-
-
-
-
-

@@ -17,21 +17,25 @@ impl fmt::Display for EOFContainer {
         )?;
         for i in 0..self.sections.len() {
             match self.sections[i] {
-                EOFSection::Code(ref code) => writeln!(
-                    f,
-                    //"| {} | Code | {} | {} |",
-                    "**Section #{}**\n(len: {})\n{}\n",
-                    i,
-                    code.len(),
-                    hex::encode(code)
-                )?,
-                EOFSection::Data(ref data) => writeln!(
-                    f,
-                    "| {} | Data | {} | {} |",
-                    i,
-                    data.len(),
-                    hex::encode(data)
-                )?,
+                EOFSection::Code(ref code) => {
+                    writeln!(
+                        f,
+                        //"| {} | Code | {} | {} |",
+                        "**Section #{}**\n(len: {})\n{}\n",
+                        i,
+                        code.len(),
+                        hex::encode(code)
+                    )?
+                }
+                EOFSection::Data(ref data) => {
+                    writeln!(
+                        f,
+                        "| {} | Data | {} | {} |",
+                        i,
+                        data.len(),
+                        hex::encode(data)
+                    )?
+                }
                 EOFSection::Type(ref types) => {
                     //                    let type_str = types
                     //                        .iter()
@@ -57,6 +61,7 @@ impl fmt::Display for EOFContainer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::de::*;
 
     #[test]
     fn complex_container() {
@@ -90,7 +95,7 @@ mod tests {
     fn andreis_code() {
         let bin = "ef000101000c020003003b0017001d0300000000000004010100030101000460043560003560e01c63c766526781145d001c63c6c2ea1781145d00065050600080fd50b0000260005260206000f350b0000160005260206000f3600181115d0004506001b160018103b0000181029050b1600281115d0004506001b160028103b0000260018203b00002019050b1";
         let input = hex::decode(bin).unwrap();
-        let deserialized = crate::de::from_slice(&input[..]).unwrap();
+        let deserialized = from_slice(&input[..]).unwrap();
         let formatted = format!("{}", deserialized);
         println!("{}", termimad::inline(&formatted));
     }

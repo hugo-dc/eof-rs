@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize, Serializer, Deserializer};
-use hex::{FromHex};
+use hex::FromHex;
 
 pub const EOF_MAGIC: u16 = 0xef00;
 pub const EOF_VERSION_1: u8 = 1;
@@ -59,17 +59,18 @@ where
 }
 
 fn deserialize_hexstr<'de, D>(d: D) -> Result<Vec<u8>, D::Error>
-where 
-    D: Deserializer<'de>
+where
+    D: Deserializer<'de>,
 {
     use serde::de::Error;
-    String::deserialize(d)
-    .and_then(|string| Vec::from_hex(&string).map_err(|err| Error::custom(err.to_string())))
+    String::deserialize(d).and_then(|string| {
+        Vec::from_hex(&string).map_err(|err| Error::custom(err.to_string()))
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
+    use super::*;
 
     #[test]
     fn encode_json() {

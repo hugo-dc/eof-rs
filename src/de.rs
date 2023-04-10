@@ -115,7 +115,7 @@ impl Decoder {
                                     size: code_size,
                                 });
 
-                                c+=1;
+                                c += 1;
                                 if c >= section_size {
                                     break;
                                 }
@@ -124,7 +124,7 @@ impl Decoder {
                             }
                         }
                         code_section_found = true;
-                    },
+                    }
                     EOF_SECTION_DATA => {
                         self.headers.push(HeaderEntry {
                             kind: section_kind,
@@ -145,11 +145,14 @@ impl Decoder {
         }
 
         for i in 0..self.headers.len() {
-            if reader.len() < self.headers[i].size as usize || (self.headers[i].size == 0 && self.headers[i].kind != EOF_SECTION_DATA ) {
+            if reader.len() < self.headers[i].size as usize ||
+                (self.headers[i].size == 0 && self.headers[i].kind != EOF_SECTION_DATA)
+            {
                 return Err(Error::InvalidCodeSize);
             }
-            self.contents
-                .push(reader.read_bytes(self.headers[i].size as usize)?);
+            self.contents.push(reader.read_bytes(
+                self.headers[i].size as usize,
+            )?);
         }
 
         if !type_section_found {
@@ -181,13 +184,13 @@ impl Decoder {
         for i in 0..self.headers.len() {
             let kind = self.headers[i].kind;
             if kind == EOF_SECTION_CODE {
-                container
-                    .sections
-                    .push(EOFSection::Code(self.contents[i].to_vec()));
+                container.sections.push(EOFSection::Code(
+                    self.contents[i].to_vec(),
+                ));
             } else if kind == EOF_SECTION_DATA {
-                container
-                    .sections
-                    .push(EOFSection::Data(self.contents[i].to_vec()));
+                container.sections.push(EOFSection::Data(
+                    self.contents[i].to_vec(),
+                ));
             } else if kind == EOF_SECTION_TYPE {
                 let mut reader = &self.contents[i][..];
 
@@ -224,10 +227,12 @@ mod tests {
     use super::*;
 
     // TODO: The following tests should only validate if EOF format is valid, for example,
-    // there may exist a container with invalid version, version should be validated in validate.rs 
+    // there may exist a container with invalid version, version should be validated in validate.rs
     #[test]
     fn decode_eof_bytes() {
-        let input = hex::decode("ef000101000802000200010001030005000000000001010001fefe0001020304").unwrap();
+        let input = hex::decode(
+            "ef000101000802000200010001030005000000000001010001fefe0001020304",
+        ).unwrap();
         let container = EOFContainer {
             version: 1,
             sections: vec![
@@ -300,10 +305,7 @@ mod tests {
         let input = hex::decode("ef00010100040300020000000000feaabb").unwrap();
         let deserialized = from_slice(&input[..]);
 
-        assert_eq!(
-            deserialized,
-            Err(Error::MissingCodeHeader)
-        );
+        assert_eq!(deserialized, Err(Error::MissingCodeHeader));
     }
 
     #[test]
@@ -312,23 +314,4 @@ mod tests {
         let deserialized = from_slice(&input[..]);
         assert_eq!(deserialized, Err(Error::MissingDataHeader));
     }
-
-
-    // NOTE: This cannot happen because if the code ends without terminator, the
-    // container format is not valid
-    /*
-    #[test]
-    fn missing_terminator() {
-        let input = hex::decode("ef0001010004020001000103000001010000fe").unwrap();
-        let deserialized = from_slice(&input[..]);
-        assert_eq!(deserialized, Err(Error::MissingTerminator));
-    }
-    */
-
 }
-
-
-
-
-
-

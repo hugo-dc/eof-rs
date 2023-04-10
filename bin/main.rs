@@ -2,14 +2,9 @@ use std::io;
 
 use std::fs::File;
 use std::io::BufReader;
-//use std::path::PathBuf;
-
 use eof_rs::*;
 use hex::FromHex;
-//use eof_rs::error
 
-//use clap::{crate_authors, crate_description, crate_name, crate_version, Arg, ArgMatches, Command};
-//use clap::{arg, command, value_parser, ArgAction, Command};
 use clap::{arg, command, Command};
 
 fn validate(input: Option<&String>) -> Result<()> {
@@ -22,7 +17,6 @@ fn validate(input: Option<&String>) -> Result<()> {
 }
 
 fn convert(input: Option<&String>, fmt: &str) -> Result<()> {
-
     let code: Vec<u8>;
     if input.is_some() {
         code = Vec::from_hex(input.unwrap()).unwrap();
@@ -30,7 +24,7 @@ fn convert(input: Option<&String>, fmt: &str) -> Result<()> {
         code = Vec::from_hex(io::read_to_string(io::stdin()).unwrap().trim()).unwrap();
     }
 
-    let container = eof_rs::from_slice(&code)?; // FIXME: translate error
+    let container = eof_rs::from_slice(&code)?;
     container.is_valid_eof()?;
 
     if fmt == "json" {
@@ -46,15 +40,16 @@ fn main() -> Result<()> {
     let matches = command!()
         .subcommand_required(true)
         .subcommand(
-        Command::new("validate").about("validates a given EOF structure")
-        .arg(arg!([input] "Input file to operate on (stdin if omitted)"))
+            Command::new("validate")
+                .about("validates a given EOF structure")
+                .arg(arg!([input] "Input file to operate on (stdin if omitted)")),
         )
         .subcommand(
             Command::new("convert")
                 .about("converts between various representations")
-        .arg(arg!([input] "Input file to operate on (stdin if omitted)"))
+                .arg(arg!([input] "Input file to operate on (stdin if omitted)"))
                 .arg(
-                    arg!(--fmt <FMT> "target format (bin, json, yaml)").required(true), //.value_parser(value_parser!(PathBuf)),
+                    arg!(--fmt <FMT> "target format (bin, json, yaml)").required(true),
                 ),
         )
         .get_matches();
@@ -65,6 +60,5 @@ fn main() -> Result<()> {
         let fmt = matches.get_one::<String>("fmt").expect("ensurde by clap");
         convert(matches.get_one::<String>("input"), fmt)?
     }
-
     Ok(())
 }
