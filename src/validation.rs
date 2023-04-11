@@ -25,99 +25,101 @@ pub fn validate_code(
         if i >= code.len() {
             break;
         }
-
-        if let Ok(op) = OpCode::from(code[i]) {
-            if current_stack_height < (op.stack_inputs as u16) {
-                return Err(Error::StackUnderflow);
-            }
-
-            stack_heights.insert(i as u16, current_stack_height);
-            current_stack_height = current_stack_height - (op.stack_inputs as u16) +
-                (op.stack_outputs as u16);
-
-            if current_stack_height > max_stack_height {
-                max_stack_height = current_stack_height;
-            }
-
-            if op.immediates as usize > code[i + 1..].len() {
-                return Err(Error::TruncatedImmediate);
-            }
-            if op.name == "CALLF" {
-                let section: [u8; 2] = code[i + 1..i + 3].try_into().unwrap();
-                let section = u16::from_be_bytes(section);
-
-                if section as usize >= types.len() {
-                    return Err(Error::InvalidSectionArgument);
+        match OpCode::from(code[i]) {
+            Ok(op) => {
+                if current_stack_height < (op.stack_inputs as u16) {
+                    return Err(Error::StackUnderflow);
                 }
 
-                if current_stack_height + types[section as usize].max_stack_height as u16 > 1024 {
-                    return Err(Error::StackOverflow);
-                }
-            }
-            if op.name == "RJUMP" || op.name == "RJUMPI" {
-                let offset: [u8; 2] = code[i + 1..i + 3].try_into().unwrap();
-                let offset = i16::from_be_bytes(offset);
-                let dest = (i + 1 + op.immediates as usize) as i32 + offset as i32;
+                stack_heights.insert(i as u16, current_stack_height);
+                current_stack_height = current_stack_height - (op.stack_inputs as u16) +
+                    (op.stack_outputs as u16);
 
-                if dest as usize >= code.len() {
-                    return Err(Error::InvalidJumpdest);
+                if current_stack_height > max_stack_height {
+                    max_stack_height = current_stack_height;
                 }
-                rjumpdests.insert(dest as u16);
 
-                if op.name == "RJUMPI" {
-                    worklist.insert(dest as u16, (current_stack_height, visiting));
+                if op.immediates as usize > code[i + 1..].len() {
+                    return Err(Error::TruncatedImmediate);
                 }
-            }
+                match op.name {
+                    "CALLF" => {
+                        let section: [u8; 2] = code[i + 1..i + 3].try_into().unwrap();
+                        let section = u16::from_be_bytes(section);
 
-            if op.name == "RJUMPV" {
-                let count = code[i + 1];
-                if count == 0 {
-                    return Err(Error::InvalidBranchCount);
+                        if section as usize >= types.len() {
+                            return Err(Error::InvalidSectionArgument);
+                        }
+
+                        if current_stack_height + types[section as usize].max_stack_height as u16 > 1024 {
+                            return Err(Error::StackOverflow);
+                        }
+                    }
+                    "RJUMP" | "RJUMPI" => {
+                        let offset: [u8; 2] = code[i + 1..i + 3].try_into().unwrap();
+                        let offset = i16::from_be_bytes(offset);
+                        let dest = (i + 1 + op.immediates as usize) as i32 + offset as i32;
+
+                        if dest as usize >= code.len() {
+                            return Err(Error::InvalidJumpdest);
+                        }
+                        rjumpdests.insert(dest as u16);
+
+                        if op.name == "RJUMPI" {
+                            worklist.insert(dest as u16, (current_stack_height, visiting));
+                        }
+                    }
+                    "RJUMPV" => {
+                        let count = code[i + 1];
+                        if count == 0 {
+                            return Err(Error::InvalidBranchCount);
+                        }
+                        // Add immediates
+                        let imm_pc: Vec<u16> = ((i + 2) as u16..((i + 2 + (count * 2) as usize) as u16))
+                            .collect();
+                        let imm: HashSet<u16> = HashSet::from_iter(imm_pc.iter().cloned());
+                        immediates = immediates.union(&imm).cloned().collect();
+
+                        let inst_end = i + 1 + op.immediates as usize + (count as usize * 2);
+
+                        rjumpdests.insert(inst_end as u16);
+                        worklist.insert(inst_end as u16, (current_stack_height, visiting));
+                        for j in 0..(count as usize) {
+                            let offset: [u8; 2] =
+                                code[i + 2 + (j * 2)..i + 4 + (j * 2)].try_into().unwrap();
+                            let offset = i16::from_be_bytes(offset);
+                            let dest = inst_end as i32 + offset as i32;
+                            if dest as usize >= code.len() {
+                                return Err(Error::InvalidJumpdest);
+                            }
+                            rjumpdests.insert(dest as u16);
+                            worklist.insert(dest as u16, (current_stack_height, visiting));
+                        }
+                        i += count as usize * 2;
+                    }
+                    "RETF" => {
+                        if current_stack_height != types[function_id].outputs as u16 {
+                            return Err(Error::InvalidOutputs);
+                        }
+                    }
+                    _ => {}
                 }
-                // Add immediates
-                let imm_pc: Vec<u16> = ((i + 2) as u16..((i + 2 + (count * 2) as usize) as u16))
+                let imm_pc: Vec<u16> = ((i + 1) as u16..((i + 1 + op.immediates as usize) as u16))
                     .collect();
                 let imm: HashSet<u16> = HashSet::from_iter(imm_pc.iter().cloned());
                 immediates = immediates.union(&imm).cloned().collect();
+                i += 1 + op.immediates as usize;
 
-                let inst_end = i + 1 + op.immediates as usize + (count as usize * 2);
-
-                rjumpdests.insert(inst_end as u16);
-                worklist.insert(inst_end as u16, (current_stack_height, visiting));
-                for j in 0..(count as usize) {
-                    let offset: [u8; 2] =
-                        code[i + 2 + (j * 2)..i + 4 + (j * 2)].try_into().unwrap();
-                    let offset = i16::from_be_bytes(offset);
-                    let dest = inst_end as i32 + offset as i32;
-                    if dest as usize >= code.len() {
-                        return Err(Error::InvalidJumpdest);
-                    }
-                    rjumpdests.insert(dest as u16);
-                    worklist.insert(dest as u16, (current_stack_height, visiting));
-                }
-                i += count as usize * 2;
-            }
-
-            if op.name == "RETF" {
-                if current_stack_height != types[function_id].outputs as u16 {
-                    return Err(Error::InvalidOutputs);
+                if op.is_terminating || op.name == "RJUMP" {
+                    ends_with_terminating_instruction = true;
+                    visiting = false;
+                } else {
+                    ends_with_terminating_instruction = false;
                 }
             }
-
-            let imm_pc: Vec<u16> = ((i + 1) as u16..((i + 1 + op.immediates as usize) as u16))
-                .collect();
-            let imm: HashSet<u16> = HashSet::from_iter(imm_pc.iter().cloned());
-            immediates = immediates.union(&imm).cloned().collect();
-            i += 1 + op.immediates as usize;
-
-            if op.is_terminating || op.name == "RJUMP" {
-                ends_with_terminating_instruction = true;
-                visiting = false;
-            } else {
-                ends_with_terminating_instruction = false;
+            Err(_) => {
+                return Err(Error::UndefinedInstruction(code[i]));
             }
-        } else {
-            return Err(Error::UndefinedInstruction(code[i]));
         }
     }
 
@@ -133,7 +135,6 @@ pub fn validate_code(
             }
         }
     }
-
 
     if max_stack_height != types[function_id].max_stack_height as u16 {
         return Err(Error::InvalidMaxStackHeight);
@@ -189,7 +190,6 @@ impl EOFValidator for EOFContainer {
             return Err(Error::NoSections);
         }
 
-        //let mut code_found = false;
         let mut code_count = 0;
         let mut data_found = false;
         let mut type_found: Option<usize> = None;
@@ -222,7 +222,6 @@ impl EOFValidator for EOFContainer {
             }
         }
 
-        // TODO: Remove this, it is validated below
         if !type_found.is_some() {
             return Err(Error::MissingTypeHeader);
         }
@@ -239,44 +238,43 @@ impl EOFValidator for EOFContainer {
             return Err(err);
         }
 
-        if let Some(type_found) = type_found {
-            if let EOFSection::Type(ref types) = self.sections[type_found] {
-                if types.len() != code_count {
-                    return Err(Error::InvalidCodeHeader);
-                }
-
-                // Validate max inputs, outputs and stack height
-                for i in 0..types.len() {
-                    if types[i].inputs > 127 {
-                        return Err(Error::TooManyInputs);
-                    }
-                    if types[i].outputs > 127 {
-                        return Err(Error::TooManyOutputs);
-                    }
-                    if types[i].max_stack_height >= 1024 {
-                        return Err(Error::TooLargeMaxStackHeight);
-                    }
-                    if i == 0 && (types[i].inputs != 0 || types[i].outputs != 0) {
-                        return Err(Error::InvalidSection0Type);
-                    }
-                }
-
-                // Iterate over code sections and validate each one.
-                let mut code_sections_count = 0;
-                for i in 0..self.sections.len() {
-                    if let EOFSection::Code(ref code) = self.sections[i] {
-                        validate_code(code_sections_count, code, types)?;
-                        code_sections_count += 1;
-                    }
-                }
-
-                let types_count = types.len();
-                if code_sections_count != types_count {
-                    return Err(Error::InvalidCodeHeader);
-                }
-            } else {
-                panic!(); // In case the above logic is wrong.
+        let type_found = type_found.unwrap();
+        if let EOFSection::Type(ref types) = self.sections[type_found] {
+            if types.len() != code_count {
+                return Err(Error::InvalidCodeHeader);
             }
+
+            // Validate max inputs, outputs and stack height
+            for i in 0..types.len() {
+                if types[i].inputs > 127 {
+                    return Err(Error::TooManyInputs);
+                }
+                if types[i].outputs > 127 {
+                    return Err(Error::TooManyOutputs);
+                }
+                if types[i].max_stack_height >= 1024 {
+                    return Err(Error::TooLargeMaxStackHeight);
+                }
+                if i == 0 && (types[i].inputs != 0 || types[i].outputs != 0) {
+                    return Err(Error::InvalidSection0Type);
+                }
+            }
+
+            // Iterate over code sections and validate each one.
+            let mut code_sections_count = 0;
+            for i in 0..self.sections.len() {
+                if let EOFSection::Code(ref code) = self.sections[i] {
+                    validate_code(code_sections_count, code, types)?;
+                    code_sections_count += 1;
+                }
+            }
+
+            let types_count = types.len();
+            if code_sections_count != types_count {
+                return Err(Error::InvalidCodeHeader);
+            }
+        } else {
+            panic!(); // In case the above logic is wrong.
         }
         Ok(())
     }
